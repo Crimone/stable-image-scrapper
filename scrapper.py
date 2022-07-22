@@ -1,13 +1,42 @@
+#<o- made by mercuria -o>
+
 import requests
 from selenium import webdriver
-import os,time,base64,getpass
+import os,time,base64,getpass,sys
 from bs4 import BeautifulSoup
+import re
+import shutil
+import random
+
+os.environ['NO_PROXY'] = '127.0.0.1'
 
 thisPath=os.path.dirname( os.path.realpath(__file__) )
 picklefile="{}/session.pickle".format(thisPath)
 imageFile='{}/images.txt'.format(thisPath)
 separator=" "
-downloadDirectory='{}/download'.format(thisPath)
+downloadDirectory='F:\\regenerated'
+fname=''
+
+def countdown(t):
+    t = t-1
+    real = t
+    while t >= 0:
+        if t == real:
+            sys.stdout.write('Duration : {}s'.format(t))
+        else:
+            sys.stdout.write('\r'+'Duration : {}s'.format(t))
+        time.sleep(1)
+        t -= 1
+    sys.stdout.write('\r')
+
+def uploadToVimCn(imgPath):
+    #upload to Vim-cn
+    imgOpen = open(imgPath, 'rb')
+    files = {'file': imgOpen}
+    r = requests.post('https://img.vim-cn.com/',
+                      data={'name': '@/path/to/image'}, files=files)
+    imgOpen.close()
+    return r.text
 
 def getImages():
     with open(imageFile, 'r') as myfile:
@@ -17,39 +46,42 @@ def getImages():
 
 
 def getSimilarImagePageLink(url):
-    print("getting simlar")
-    selenumdriver.get('https://images.google.com/searchbyimage?image_url={}'.format(url))
+    print("getting maxsize")
+    selenumdriver.get('https://images.google.com/searchbyimage?hl=en-US&image_url={}'.format(url))
     htmltext=selenumdriver.page_source
     soup = BeautifulSoup(htmltext,"lxml")
-    a=soup.find('a', attrs={'class': 'iu-card-header'})
-    if a:
-        print("images site link: https://www.google.com{}".format(a.get("href")))
-        return "https://www.google.com{}".format(a.get("href"))
+
+    #this is the unique label before all search results
+    #load all search results
+    a_matrix = soup.find('div', string=["Pages that include matching images"])
+    if a_matrix:
+
+        #"rGhul IHSDrd" is the unique label before the first search result picture
+        #load all result picture
+        picture = a_matrix.find_all_next('a',attrs={'class':'rGhul IHSDrd'})
+        max_index = 0
+        max_size = 0
+        for index in range(len(picture)):
+            size = picture[index].find_next('span').get_text()
+            num = re.findall(r'\d+', size)
+            if (int(num[0])*int(num[1])) > max_size:
+                max_index = index
+                max_size = int(num[0])*int(num[1])
+        print("images site link: https://www.google.com{}".format(picture[max_index].get("href")))
+
+        return "https://www.google.com{}".format(picture[max_index].get("href"))
     else:
         return None
-    
-def googleLogin():
-    googleusername=input("enter google email\n")
-    password=getpass.getpass(prompt="password for {}\n".format(googleusername))
-    if not (googleLogin and password):
-        return
-    selenumdriver.get("https://accounts.google.com/signin")
-    selenumdriver.find_element_by_css_selector("input[aria-label='Email or phone']").send_keys(googleusername)
-    selenumdriver.find_element_by_css_selector("div#identifierNext").click()
-    time.sleep(2)
-    selenumdriver.find_element_by_css_selector("input[type='password']").send_keys(password)
-    time.sleep(0.5)
-    selenumdriver.find_element_by_css_selector("div#passwordNext").click()
 
-def saveImg(src,name,count):
+def saveImg(src,name):
     if "data:image" in src[:20]:
         imgdata = base64.b64decode(src.split(",")[1])
         extension=src[:40].split(";")[0].split("/")[1]
     else:
-        response = requests.get(src)
+        response = requests.get(src,proxies={'http': 'http://localhost:10809', 'https': 'http://localhost:10809'})
         imgdata=response.content
         extension=response.headers['content-type'].split("/")[1]
-    filename="{}/{}/{}_{}.{}".format(downloadDirectory,name,name,count,extension)
+    filename="{}/{}.{}".format(downloadDirectory,name,extension)
     print("saved image at ({})".format(filename))
     if imgdata:
         with open(filename, 'wb') as f:
@@ -57,66 +89,52 @@ def saveImg(src,name,count):
         return True
 
 
-def downloadFromSimilarImagesPage(url,name,maxNo):
+def downloadFromSimilarImagesPage(url,name):
+    global fname
     selenumdriver.get(url)
-    div={}
-    scrollTo=1080
-    previous_imgs=0
-    while len(div)<maxNo:
-        selenumdriver.execute_script("window.scrollTo(0, {})".format(scrollTo))
-        time.sleep(2)
-        htmltext=selenumdriver.page_source
-        soup = BeautifulSoup(htmltext,"lxml")
-        div=soup.find("div", attrs={'id': 'search'}).find_all("img")
-        scrollTo+=500
-        if len(div) ==0 or len(div)==previous_imgs:
-            break
-        previous_imgs=len(div)
-
-    os.makedirs("{}/{}".format(downloadDirectory,name), exist_ok=True)
-    count=0
-
-    for img in div:
-        src= img.get("src") if img.get("src") else img.get("data-src")
-       
-        if src:
-            print("saving image {}".format(count))
-            try:
-                if saveImg(src,name,count):
-                    count+=1
-            except Exception:
-                continue
-        if count>maxNo:
-            break
+    time.sleep(2)
+    htmltext=selenumdriver.page_source
+    soup = BeautifulSoup(htmltext,"lxml")
+    div=soup.find("img")
+    src= div.get("src")
+    print(src)
+    saveImg(src, name)
+    shutil.move(fname, 'F:\\stabled')
 
     
 
     
 def main():
     global selenumdriver
+    global fname
     selenumdriver = webdriver.Firefox()
-    googleLogin()
-    return
-    images=getImages()
-    for each in images:
-        if "#" not in each[0] and len(each)==3:
-            name,count,url=each
-            print(each)
-            similarImagePageLink=getSimilarImagePageLink(url)
+    for root, _, files in os.walk(u'.', topdown=False):
+        for f in files:
+            fname = os.path.join(root, f)
+            for ext in {".jpg", ".jpeg", ".png", ".gif", ".bmp"}:
+                if fname.lower().endswith(ext) and f[0] != 'z':
+                    print(fname)
+                    try:
+                        similarImagePageLink = getSimilarImagePageLink(uploadToVimCn(fname))
+                        #countdown(random.randint(20, 50))
+                        name = os.path.splitext(f)[0]
+                        if similarImagePageLink:
+                            downloadFromSimilarImagesPage(url=similarImagePageLink, name=name)
+                        else:
+                            print("cannot get maxsize image search page")
+                            newfname = os.path.join(root, "zeed_notmatch_" + f)
+                            print('Alter Name: ' + newfname)
+                            if os.path.exists(newfname):
+                                os.remove(fname)
+                            else:
+                                os.rename(fname, newfname)
+                        #countdown(random.randint(45, 75))
+                        print('\n\n')
+                    except Exception as e:
+                        print(str(e))
+                        print("quiting")
 
-            if similarImagePageLink:
-                downloadFromSimilarImagesPage(url=similarImagePageLink,name=name,maxNo=int(count))
-            else:
-                print("cant get similar image search page")
 
 if __name__=="__main__":
-    try:
-        main()
-    except ValueError as e:
-        print(str(e))
-        print("quiiting")
-        print("make sure there is no more than one spaces in {} also at the end".format(imageFile))
-    finally:
-        #saveSession()
-        if 'selenumdriver' in globals():
-            selenumdriver.close()
+    main()
+    print('All Done!')
