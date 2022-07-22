@@ -8,6 +8,8 @@ import re
 import shutil
 import random
 
+import pichost.uploader
+
 os.environ['NO_PROXY'] = '127.0.0.1'
 
 thisPath=os.path.dirname( os.path.realpath(__file__) )
@@ -31,12 +33,9 @@ def countdown(t):
 
 def uploadToVimCn(imgPath):
     #upload to Vim-cn
-    imgOpen = open(imgPath, 'rb')
-    files = {'file': imgOpen}
-    r = requests.post('https://img.vim-cn.com/',
-                      data={'name': '@/path/to/image'}, files=files)
-    imgOpen.close()
-    return r.text
+    rin = pichost.uploader.image_upload(imgPath,1)
+    return rin.text
+
 
 def getImages():
     with open(imageFile, 'r') as myfile:
@@ -108,7 +107,7 @@ def main():
     global selenumdriver
     global fname
     selenumdriver = webdriver.Firefox()
-    for root, _, files in os.walk(u'.', topdown=False):
+    for root, _, files in os.walk(u'F:\\notmatch', topdown=False):
         for f in files:
             fname = os.path.join(root, f)
             for ext in {".jpg", ".jpeg", ".png", ".gif", ".bmp"}:
